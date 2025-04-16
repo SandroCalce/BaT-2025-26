@@ -1,4 +1,6 @@
 from abc import ABC
+
+import networkx as nx
 from networkx import Graph, shortest_path
 
 
@@ -103,7 +105,7 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
         self.alpha = adapt_param
         self.neighbors = neighbors
 
-        init_prob = 1/len(neighbors)
+        init_prob = 1 / len(neighbors)
         self.prob_dist = {neighbor: init_prob for neighbor in neighbors}
         self.starting_prob_dist = self.prob_dist
 
@@ -127,7 +129,7 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
         # increase probability for links in T
         if len(T) > 0:
             sum_st = sum([self.prob_dist[i] for i in (S | T)])
-            new_prob_increase = (self.alpha/len(T)) * (1 - sum_st)
+            new_prob_increase = (self.alpha / len(T)) * (1 - sum_st)
             for t in T:
                 self.prob_dist[t] += new_prob_increase
 
@@ -158,7 +160,7 @@ class Request:
         """
 
         self.submit_time = submit_time
-        self.start_time = submit_time # start time is no earlier than submit time
+        self.start_time = submit_time  # start time is no earlier than submit time
         self.pair = pair
         self.route = None
 
@@ -183,6 +185,7 @@ class Request:
         while u_curr != end:
             node = nodes[u_curr]
             virtual_neighbors = [n for n, count in node.entanglement_link_nums.items() if count > 1]
+            # print(virtual_neighbors)
             if len(virtual_neighbors) == 0:
                 u = shortest_path(G, u_curr, end)[1]
             else:

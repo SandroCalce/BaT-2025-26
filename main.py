@@ -1,6 +1,7 @@
 from time import time
 
 import numpy as np
+import requests
 from matplotlib import pyplot as plt
 import networkx as nx
 
@@ -12,7 +13,7 @@ from protocols import *
 CONFIG = "network_customized.json"
 GENERATE_NEW_NET = False
 TRAFFIC_MATRIX = "traffic_matrix.json"
-GENERATE_NEW_TRAFFIC = False
+GENERATE_NEW_TRAFFIC = True
 RANDOM_REQUESTS = True
 NET_SIZE = 8
 NET_TYPE = "as_net"
@@ -54,6 +55,7 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
     origin_node = None
     destination_node = None
     route = []
+    # print(graph_arr)
 
     while time < end_time:
         # check if memories expired
@@ -62,6 +64,32 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
                 expire_time = memory.entangled_memory["expire_time"]
                 if expire_time is not None and expire_time <= time:
                     node.memo_expire(memory)
+
+        #prepare wormhole
+        G = Graph(graph_arr)
+        between = nx.betweenness_centrality(G, normalized=False, endpoints=True)
+        max_1 = (0, 0)
+        max_2 = (0, 0)
+        for item in between.items():
+            if item[1] > max_1[1]:
+                max_1 = item
+            elif item[1] > max_2[1]:
+                max_2 = item
+
+        req = Request(time,(max_1[0], max_2[0]))
+        #find path to pre entangle
+        worm_path = req.get_path(graph_arr, nodes)
+        worm_path_nodes = [nodes[x] for x in worm_path]
+        for i in range(len(worm_path_nodes)-1):
+            curr_node = worm_path_nodes[i]
+            next_node = worm_path_nodes[i+1]
+            curr_node.create_link_with_priority(time, next_node)
+            #if more than 2 nodes, swap to entangle start with current node
+            if i > 1:
+                first_node = worm_path_nodes[0]
+                curr_node.swap(first_node, next_node)
+
+
 
         # determine if a new request is submitted to the network
         if time == next_request_to_submit.submit_time:
