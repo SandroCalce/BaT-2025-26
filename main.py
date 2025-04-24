@@ -15,7 +15,7 @@ GENERATE_NEW_NET = False
 TRAFFIC_MATRIX = "traffic_matrix.json"
 GENERATE_NEW_TRAFFIC = True
 RANDOM_REQUESTS = True
-NET_SIZE = 8
+NET_SIZE = 20
 NET_TYPE = "as_net"
 CONTINUOUS_SCHEME = "adaptive"
 
@@ -55,7 +55,28 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
     origin_node = None
     destination_node = None
     route = []
-    # print(graph_arr)
+
+    # prepare wormhole
+    G = Graph(graph_arr)
+    between = nx.betweenness_centrality(G, normalized=True, endpoints=True)
+    degree = nx.degree_centrality(G)
+    combined_centrality = {}
+    for node in between:
+        combined_centrality[node] = between[node] + degree[node]
+
+    # Sort nodes by their combined centrality in descending order
+    sorted_combined_centrality = sorted(combined_centrality.items(), key=lambda x: x[1], reverse=True)
+
+    # Get the highest and second-highest values
+    highest_node, highest_value = sorted_combined_centrality[0]
+    second_highest_node, second_highest_value = sorted_combined_centrality[1]
+    req = Request(time, (highest_node, second_highest_node))
+    print((highest_node, highest_value), (second_highest_node, second_highest_value))
+    # find path to pre entangle
+    worm_path = req.get_path(graph_arr, nodes)
+
+    worm_path_nodes = [nodes[x] for x in worm_path]
+    print([x.label for x in worm_path_nodes])
 
     while time < end_time:
         # check if memories expired
@@ -65,29 +86,31 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
                 if expire_time is not None and expire_time <= time:
                     node.memo_expire(memory)
 
-        #prepare wormhole
-        G = Graph(graph_arr)
-        between = nx.betweenness_centrality(G, normalized=False, endpoints=True)
-        max_1 = (0, 0)
-        max_2 = (0, 0)
-        for item in between.items():
-            if item[1] > max_1[1]:
-                max_1 = item
-            elif item[1] > max_2[1]:
-                max_2 = item
-
-        req = Request(time,(max_1[0], max_2[0]))
-        #find path to pre entangle
-        worm_path = req.get_path(graph_arr, nodes)
-        worm_path_nodes = [nodes[x] for x in worm_path]
+        #TODO: throws AssertionError, nodes don't have the memory required, create_link seems to fail
         for i in range(len(worm_path_nodes)-1):
             curr_node = worm_path_nodes[i]
+            print(curr_node.label)
             next_node = worm_path_nodes[i+1]
-            curr_node.create_link_with_priority(time, next_node)
+            entagnled = False
+            while not entagnled:
+                entagnled = curr_node.create_link_with_priority(time, next_node)
+            print(curr_node.entanglement_link_nums)
             #if more than 2 nodes, swap to entangle start with current node
-            if i > 1:
+            if i > 0 :
+
                 first_node = worm_path_nodes[0]
-                curr_node.swap(first_node, next_node)
+                print("first", first_node.label)
+                print("next", next_node.label)
+                print(curr_node.label)
+                mems = curr_node.memories
+                xnodes =[x.entangled_memory for x in mems]
+                print([x["node"].label for x in xnodes if x["node"] is not None])
+                print(curr_node.entanglement_link_nums)
+                left_memory = next((mem for mem in curr_node.memories
+                                    if mem.entangled_memory["node"] == first_node), None)
+                right_memory = next((mem for mem in curr_node.memories
+                                     if mem.entangled_memory["node"] == next_node), None)
+                curr_node.swap(left_memory, right_memory)
 
 
 

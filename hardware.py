@@ -195,7 +195,7 @@ class Node:
         if self.rng.random() > self.gen_success_prob:
             self.memo_free(local_memo)
             other_node.memo_free(other_memo)
-            return
+            return False
 
         # entangle the two nodes
         local_memo.entangle(other_memo, time)
@@ -204,6 +204,7 @@ class Node:
         self.entanglement_link_nums[other_node.label] += 1
         # the other node should also update its entanglement link information
         other_node.entanglement_link_nums[self.label] += 1
+        return True
 
     def swap(self, memory1, memory2):
         """Method to do entanglement swapping.
@@ -214,7 +215,7 @@ class Node:
 
         Return the result of swapping (successful or not).
         """
-
+        print(memory1, memory2)
         assert memory1 in self.memories and memory2 in self.memories
 
         if not memory1.reserved or not memory2.reserved:
