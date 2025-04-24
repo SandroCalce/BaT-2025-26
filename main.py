@@ -87,30 +87,26 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
                     node.memo_expire(memory)
 
         #TODO: throws AssertionError, nodes don't have the memory required, create_link seems to fail
-        for i in range(len(worm_path_nodes)-1):
-            curr_node = worm_path_nodes[i]
-            print(curr_node.label)
-            next_node = worm_path_nodes[i+1]
-            entagnled = False
-            while not entagnled:
-                entagnled = curr_node.create_link_with_priority(time, next_node)
-            print(curr_node.entanglement_link_nums)
-            #if more than 2 nodes, swap to entangle start with current node
-            if i > 0 :
+        if worm_path_nodes[0].entanglement_link_nums[worm_path_nodes[-1].label] == 0 and worm_path_nodes[-1].entanglement_link_nums[worm_path_nodes[0].label] == 0:
+            for i in range(len(worm_path_nodes)-1):
+                curr_node = worm_path_nodes[i]
+                next_node = worm_path_nodes[i+1]
+                entagnled = False
+                while not entagnled:
+                    entagnled = curr_node.create_link_with_priority(time, next_node)
+                #if more than 2 nodes, swap to entangle start with current node
+                if i > 0 :
 
-                first_node = worm_path_nodes[0]
-                print("first", first_node.label)
-                print("next", next_node.label)
-                print(curr_node.label)
-                mems = curr_node.memories
-                xnodes =[x.entangled_memory for x in mems]
-                print([x["node"].label for x in xnodes if x["node"] is not None])
-                print(curr_node.entanglement_link_nums)
-                left_memory = next((mem for mem in curr_node.memories
-                                    if mem.entangled_memory["node"] == first_node), None)
-                right_memory = next((mem for mem in curr_node.memories
-                                     if mem.entangled_memory["node"] == next_node), None)
-                curr_node.swap(left_memory, right_memory)
+                    first_node = worm_path_nodes[0]
+                    left_memory = next((mem for mem in curr_node.memories
+                                        if mem.entangled_memory["node"] == first_node), None)
+                    right_memory = next((mem for mem in curr_node.memories
+                                         if mem.entangled_memory["node"] == next_node), None)
+                    if left_memory is not  None and right_memory is not None:
+                        curr_node.swap(left_memory, right_memory)
+                    else:
+                        print("mem kill")
+                        break
 
 
 

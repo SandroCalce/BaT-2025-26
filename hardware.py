@@ -215,7 +215,6 @@ class Node:
 
         Return the result of swapping (successful or not).
         """
-        print(memory1, memory2)
         assert memory1 in self.memories and memory2 in self.memories
 
         if not memory1.reserved or not memory2.reserved:
