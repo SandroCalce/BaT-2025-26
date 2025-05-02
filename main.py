@@ -4,6 +4,8 @@ import numpy as np
 import requests
 from matplotlib import pyplot as plt
 import networkx as nx
+import tempfile
+import shutil
 
 from simulation_core import *
 from hardware import *
@@ -35,7 +37,7 @@ QUEUE_INT = 200
 QUEUE_START = QUEUE_INT
 
 
-def run_simulation(graph_arr, nodes, request_stack, end_time):
+def run_simulation(graph_arr, nodes, request_stack, end_time, z):
     time = 0
 
     # metrics
@@ -48,7 +50,7 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
     requests_to_serve = []  # keep track of incomplete requests, in case new request comes in before previous request is completed
     entanglement_available = []  # keep track of entanglement links from route nodes when a request is submitted
     entanglement_ondemand = []  # keep track of entanglement links generated on demand to complete a request
-
+    n_hops = []
     # track current request and related info
     next_request_to_submit = request_stack.pop(0)
     current_request = None
@@ -56,27 +58,28 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
     destination_node = None
     route = []
 
-    # prepare wormhole
-    G = Graph(graph_arr)
-    between = nx.betweenness_centrality(G, normalized=True, endpoints=True)
-    degree = nx.degree_centrality(G)
-    combined_centrality = {}
-    for node in between:
-        combined_centrality[node] = between[node] + degree[node]
+    if z == 1:
+        # prepare wormhole
+        G = Graph(graph_arr)
+        between = nx.betweenness_centrality(G, normalized=True, endpoints=True)
+        degree = nx.degree_centrality(G)
+        combined_centrality = {}
+        for node in between:
+            combined_centrality[node] = between[node] + degree[node]
 
-    # Sort nodes by their combined centrality in descending order
-    sorted_combined_centrality = sorted(combined_centrality.items(), key=lambda x: x[1], reverse=True)
+        # Sort nodes by their combined centrality in descending order
+        sorted_combined_centrality = sorted(combined_centrality.items(), key=lambda x: x[1], reverse=True)
 
-    # Get the highest and second-highest values
-    highest_node, highest_value = sorted_combined_centrality[0]
-    second_highest_node, second_highest_value = sorted_combined_centrality[1]
-    req = Request(time, (highest_node, second_highest_node))
-    print((highest_node, highest_value), (second_highest_node, second_highest_value))
-    # find path to pre entangle
-    worm_path = req.get_path(graph_arr, nodes)
+        # Get the highest and second-highest values
+        highest_node, highest_value = sorted_combined_centrality[0]
+        second_highest_node, second_highest_value = sorted_combined_centrality[1]
+        req = Request(time, (highest_node, second_highest_node))
+        print((highest_node, highest_value), (second_highest_node, second_highest_value))
+        # find path to pre entangle
+        worm_path = req.get_path(graph_arr, nodes)
 
-    worm_path_nodes = [nodes[x] for x in worm_path]
-    print([x.label for x in worm_path_nodes])
+        worm_path_nodes = [nodes[x] for x in worm_path]
+        print([x.label for x in worm_path_nodes])
 
     while time < end_time:
         # check if memories expired
@@ -86,8 +89,7 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
                 if expire_time is not None and expire_time <= time:
                     node.memo_expire(memory)
 
-        #TODO: throws AssertionError, nodes don't have the memory required, create_link seems to fail
-        if worm_path_nodes[0].entanglement_link_nums[worm_path_nodes[-1].label] == 0 and worm_path_nodes[-1].entanglement_link_nums[worm_path_nodes[0].label] == 0:
+        if z == 1 and worm_path_nodes[0].entanglement_link_nums[worm_path_nodes[-1].label] == 0 and worm_path_nodes[-1].entanglement_link_nums[worm_path_nodes[0].label] == 0:
             for i in range(len(worm_path_nodes)-1):
                 curr_node = worm_path_nodes[i]
                 next_node = worm_path_nodes[i+1]
@@ -102,7 +104,7 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
                                         if mem.entangled_memory["node"] == first_node), None)
                     right_memory = next((mem for mem in curr_node.memories
                                          if mem.entangled_memory["node"] == next_node), None)
-                    if left_memory is not  None and right_memory is not None:
+                    if left_memory is not None and right_memory is not None:
                         curr_node.swap(left_memory, right_memory)
                     else:
                         print("mem kill")
@@ -251,6 +253,7 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
                     latencies.append(latency)
                     serve_times.append(serve_time)
                     request_complete_times.append(time)
+                    n_hops.append(len(current_request.route)-1)
                     # record entanglement links generated on demand and reset entanglement_ondemand
                     entanglement_usage_pattern["ondemand"].append(entanglement_ondemand)
                     entanglement_ondemand = []
@@ -287,7 +290,7 @@ def run_simulation(graph_arr, nodes, request_stack, end_time):
         time += 1
 
     # average latencies (over time) and return
-    return [latencies, serve_times, congestion, request_complete_times, entanglement_usage_pattern]
+    return [latencies, serve_times, congestion, request_complete_times, entanglement_usage_pattern, n_hops]
 
 
 if __name__ == "__main__":
@@ -319,120 +322,143 @@ if __name__ == "__main__":
         tm_json = json.load(tm)
         traffic_mtx = np.array(tm_json["matrix"])
 
-    latencies_list = []
-    serve_times_list = []
-    usage_pattern_list = []
+    multi_vis_available_graphs = []
+    multi_vis_ondemand_graphs = []
 
-    tick = time()
-    for trial in range(NUM_TRIALS):
-        # set nodes
-        seed_start = NET_SIZE * trial
-        nodes = [Node(i, memo_size, MEMO_LIFETIME, ENTANGLEMENT_GEN_PROB, ENTANGLEMENT_SWAP_PROB, graph_arr,
-                      seed=seed_start+i)
-                 for i, memo_size in enumerate(memo_sizes)]
-        for node in nodes:
-            other_nodes = nodes[:]
-            other_nodes.remove(node)
-            node.set_other_nodes(other_nodes)
-            node.set_generation_protocol(CONTINUOUS_SCHEME, ADAPT_WEIGHT)
+    for z in range(2): #run simulation with and without changes to be able to compare them
 
-        # Generate request node pair queue
-        if RANDOM_REQUESTS:
-            pair_queue = gen_pair_queue(traffic_mtx, NET_SIZE, QUEUE_LEN, rng, rng)
-        else:
-            pair_queue = [(9, 6) for i in range(QUEUE_LEN)]  # a queue of identical requests
-        # Generate request submission time list with constant interval
-        time_list = gen_request_time_list(QUEUE_START, QUEUE_LEN, interval=QUEUE_INT)
-        # Generate request stack
-        request_stack = [Request(time, pair) for time, pair in zip(time_list, pair_queue)]
+        latencies_list = []
+        serve_times_list = []
+        usage_pattern_list = []
+        n_hops_list = []
 
-        # Run simulation
-        latencies, serve_times, congestion, request_complete_times, entanglement_usage_pattern =\
-            run_simulation(graph_arr, nodes, request_stack, END_TIME)
-        latencies_list.append(latencies)
-        serve_times_list.append(serve_times)
-        usage_pattern_list.append(entanglement_usage_pattern)
-        print("Finished trial {} of {}".format(trial + 1, NUM_TRIALS))
-    
-    sim_time = time() - tick
-    print("Total simulation time: ", sim_time)
-    print("Average time per trial: ", sim_time / NUM_TRIALS)
+        tick = time()
+        for trial in range(NUM_TRIALS):
+            # set nodes
+            seed_start = NET_SIZE * trial
+            nodes = [Node(i, memo_size, MEMO_LIFETIME, ENTANGLEMENT_GEN_PROB, ENTANGLEMENT_SWAP_PROB, graph_arr,
+                          seed=seed_start+i)
+                     for i, memo_size in enumerate(memo_sizes)]
+            for node in nodes:
+                other_nodes = nodes[:]
+                other_nodes.remove(node)
+                node.set_other_nodes(other_nodes)
+                node.set_generation_protocol(CONTINUOUS_SCHEME, ADAPT_WEIGHT)
 
-    num_latencies = min([len(latencies_list[i]) for i in range(NUM_TRIALS)])
-    num_serve_times = min([len(serve_times_list[i]) for i in range(NUM_TRIALS)])
-    num_requests = min(num_latencies, num_serve_times)  # num_latencies and num_serve_times should be equal in principle
-    latencies_avg = np.zeros(num_requests)
-    serve_times_avg = np.zeros(num_requests)
-
-    for i in range(NUM_TRIALS):
-        latencies_avg += np.array(latencies_list[i][:num_requests])
-
-    for i in range(NUM_TRIALS):
-        serve_times_avg += np.array(serve_times_list[i][:num_requests])
-
-    latencies_avg = latencies_avg / NUM_TRIALS
-    serve_times_avg = serve_times_avg / NUM_TRIALS
-
-    # construct error
-    low_percentile = np.zeros(num_latencies)
-    high_percentile = np.zeros(num_latencies)
-    low_percentile_serve = np.zeros(num_latencies)
-    high_percentile_serve = np.zeros(num_latencies)
-    for i in range(num_latencies):
-        low_percentile[i] = np.percentile([ll[i] for ll in latencies_list], 5)
-        high_percentile[i] = np.percentile([ll[i] for ll in latencies_list], 95)
-        low_percentile_serve[i] = np.percentile([ll[i] for ll in serve_times_list], 5)
-        high_percentile_serve[i] = np.percentile([ll[i] for ll in serve_times_list], 95)
-
-    # entanglement usage pattern information
-    available_patterns = [usage_pattern_list[i]["available"] for i in range(NUM_TRIALS)]
-    ondemand_patterns = [usage_pattern_list[i]["ondemand"] for i in range(NUM_TRIALS)]
-    available_accum = [[] for i in range(num_requests)]
-    ondemand_accum = [[] for i in range(num_requests)]
-    for i in range(num_requests):
-        for pattern in available_patterns:
-            available_accum[i] += pattern[i]
-        for pattern in ondemand_patterns:
-            ondemand_accum[i] += pattern[i]
-
-    # choose the first, the last and the middle requests' patterns for visualization
-    vis_available_patterns = [available_accum[0], available_accum[round(num_requests/2)], available_accum[-1]]
-    vis_ondemand_patterns = [ondemand_accum[0], ondemand_accum[round(num_requests/2)], ondemand_accum[-1]]
-    vis_available_graphs = []
-    vis_ondemand_graphs = []
-    for pattern in vis_available_patterns:
-        G_vis = nx.Graph(graph_arr)
-        nx.set_edge_attributes(G_vis, 0, "available")
-        # nx.set_edge_attributes(G_vis, 0, "ondemand")
-        for pair in pattern:
-            if (pair[0], pair[1]) not in G_vis.edges():
-                G_vis.add_edge(pair[0], pair[1], available=1)
+            # Generate request node pair queue
+            if RANDOM_REQUESTS:
+                pair_queue = gen_pair_queue(traffic_mtx, NET_SIZE, QUEUE_LEN, rng, rng)
             else:
-                G_vis[pair[0]][pair[1]]["available"] += 1
-        vis_available_graphs.append(G_vis)
-        
-    for pattern in vis_ondemand_patterns:
-        G_vis = nx.Graph(graph_arr)
-        # nx.set_edge_attributes(G_vis, 0, "available")
-        nx.set_edge_attributes(G_vis, 0, "ondemand")
-        for pair in pattern:
-            if (pair[0], pair[1]) not in G_vis.edges():
-                G_vis.add_edge(pair[0], pair[1], ondemand=1)
-            else:
-                G_vis[pair[0]][pair[1]]["ondemand"] += 1
-        vis_ondemand_graphs.append(G_vis)
+                pair_queue = [(9, 6) for i in range(QUEUE_LEN)]  # a queue of identical requests
+            # Generate request submission time list with constant interval
+            time_list = gen_request_time_list(QUEUE_START, QUEUE_LEN, interval=QUEUE_INT)
+            # Generate request stack
+            request_stack = [Request(time, pair) for time, pair in zip(time_list, pair_queue)]
+
+            # Run simulation
+            latencies, serve_times, congestion, request_complete_times, entanglement_usage_pattern, n_hops =\
+                run_simulation(graph_arr, nodes, request_stack, END_TIME, z)
+            latencies_list.append(latencies)
+            serve_times_list.append(serve_times)
+            usage_pattern_list.append(entanglement_usage_pattern)
+            n_hops_list.append(n_hops)
+            print("Finished trial {} of {}".format(trial + 1, NUM_TRIALS))
+            print(len(n_hops))
+        sim_time = time() - tick
+        print("Total simulation time: ", sim_time)
+        print("Average time per trial: ", sim_time / NUM_TRIALS)
+
+        num_latencies = min([len(latencies_list[i]) for i in range(NUM_TRIALS)])
+        num_serve_times = min([len(serve_times_list[i]) for i in range(NUM_TRIALS)])
+        num_requests = min(num_latencies, num_serve_times)  # num_latencies and num_serve_times should be equal in principle
+        latencies_avg = np.zeros(num_requests)
+        serve_times_avg = np.zeros(num_requests)
+
+        for i in range(NUM_TRIALS):
+            latencies_avg += np.array(latencies_list[i][:num_requests])
+
+        for i in range(NUM_TRIALS):
+            serve_times_avg += np.array(serve_times_list[i][:num_requests])
+
+        latencies_avg = latencies_avg / NUM_TRIALS
+        serve_times_avg = serve_times_avg / NUM_TRIALS
+
+
+
+        print(f"Finished Sim-Run {z}")
+
+        # construct error
+        low_percentile = np.zeros(num_latencies)
+        high_percentile = np.zeros(num_latencies)
+        low_percentile_serve = np.zeros(num_latencies)
+        high_percentile_serve = np.zeros(num_latencies)
+        for i in range(num_latencies):
+            low_percentile[i] = np.percentile([ll[i] for ll in latencies_list], 5)
+            high_percentile[i] = np.percentile([ll[i] for ll in latencies_list], 95)
+            low_percentile_serve[i] = np.percentile([ll[i] for ll in serve_times_list], 5)
+            high_percentile_serve[i] = np.percentile([ll[i] for ll in serve_times_list], 95)
+
+        # entanglement usage pattern information
+        available_patterns = [usage_pattern_list[i]["available"] for i in range(NUM_TRIALS)]
+        ondemand_patterns = [usage_pattern_list[i]["ondemand"] for i in range(NUM_TRIALS)]
+        available_accum = [[] for i in range(num_requests)]
+        ondemand_accum = [[] for i in range(num_requests)]
+        for i in range(num_requests):
+            for pattern in available_patterns:
+                available_accum[i] += pattern[i]
+            for pattern in ondemand_patterns:
+                ondemand_accum[i] += pattern[i]
+
+        # choose the first, the last and the middle requests' patterns for visualization
+        vis_available_patterns = [available_accum[0], available_accum[round(num_requests/2)], available_accum[-1]]
+        vis_ondemand_patterns = [ondemand_accum[0], ondemand_accum[round(num_requests/2)], ondemand_accum[-1]]
+        vis_available_graphs = []
+        vis_ondemand_graphs = []
+        for pattern in vis_available_patterns:
+            G_vis = nx.Graph(graph_arr)
+            nx.set_edge_attributes(G_vis, 0, "available")
+            # nx.set_edge_attributes(G_vis, 0, "ondemand")
+            for pair in pattern:
+                if (pair[0], pair[1]) not in G_vis.edges():
+                    G_vis.add_edge(pair[0], pair[1], available=1)
+                else:
+                    G_vis[pair[0]][pair[1]]["available"] += 1
+            vis_available_graphs.append(G_vis)
+        multi_vis_available_graphs.append(vis_available_graphs)
+
+        for pattern in vis_ondemand_patterns:
+            G_vis = nx.Graph(graph_arr)
+            # nx.set_edge_attributes(G_vis, 0, "available")
+            nx.set_edge_attributes(G_vis, 0, "ondemand")
+            for pair in pattern:
+                if (pair[0], pair[1]) not in G_vis.edges():
+                    G_vis.add_edge(pair[0], pair[1], ondemand=1)
+                else:
+                    G_vis[pair[0]][pair[1]]["ondemand"] += 1
+            vis_ondemand_graphs.append(G_vis)
+        multi_vis_ondemand_graphs.append(vis_ondemand_graphs)
 
     # save data
-    filename = "data_" + CONTINUOUS_SCHEME + ".json"
-    data = {"latencies": latencies_list,
+        filename = "data_" + CONTINUOUS_SCHEME + "_" + str(z) + ".json"
+        data = {
+            "latencies": latencies_list,
+            "n_hops": n_hops_list,
             "service_times": serve_times_list,
             "average_latencies": latencies_avg.tolist(),
             "average_service_times": serve_times_avg.tolist(),
             "accumulated_available_patterns": available_accum,
-            "accumulated_ondemand_patterns": ondemand_accum}
-    fh = open(filename, 'w')
-    json.dump(data, fh)
-            
+            "accumulated_ondemand_patterns": ondemand_accum
+        }
+
+        # Atomic write to prevent partial file
+        with tempfile.NamedTemporaryFile('w', delete=False) as tmp:
+            json.dump(data, tmp)
+            tmp.flush()
+            tmp_path = tmp.name
+
+        shutil.move(tmp_path, filename)
+
+
     # statistics visualization
     requests_latencies = np.arange(num_latencies)
     requests_serve_times = np.arange(num_serve_times)
@@ -443,7 +469,7 @@ if __name__ == "__main__":
     ax1.plot(requests_latencies, latencies_avg)
     ax1.set_title("average request latencies")
     ax1.fill_between(requests_latencies, high_percentile, low_percentile, alpha=0.4)
-    
+
     ax2 = plt.subplot(212)
     ax2.plot(requests_serve_times, serve_times_avg)
     ax2.set_title("average times to serve requests")
@@ -454,22 +480,62 @@ if __name__ == "__main__":
     plt.show()
 
     # patterns visualization on graphs
-    for Graph in vis_available_graphs:
-        edges = Graph.edges()
-        avails = [Graph[u][v]["available"] for u,v in edges]
-        nx.draw_networkx_nodes(Graph, pos)
-        nx.draw_networkx_labels(Graph, pos)
-        edges_drawn = nx.draw_networkx_edges(Graph, pos, edge_color=avails, width=2, edge_cmap=plt.cm.Greens, edge_vmin=0)
-        plt.colorbar(edges_drawn)
-        plt.axis('off')
-        plt.show()
-    
-    for Graph in vis_ondemand_graphs:
-        edges = Graph.edges()
-        ondemands = [Graph[u][v]["ondemand"] for u,v in edges]
-        nx.draw_networkx_nodes(Graph, pos)
-        nx.draw_networkx_labels(Graph, pos)
-        edges_drawn = nx.draw_networkx_edges(Graph, pos, edge_color=ondemands, width=2, edge_cmap=plt.cm.Reds, edge_vmin=0)
-        plt.colorbar(edges_drawn)
-        plt.axis('off')
-        plt.show()
+    for vis_available_graphs in multi_vis_available_graphs:
+        for Graph in vis_available_graphs:
+            edges = Graph.edges()
+            avails = [Graph[u][v]["available"] for u,v in edges]
+            nx.draw_networkx_nodes(Graph, pos)
+            nx.draw_networkx_labels(Graph, pos)
+            edges_drawn = nx.draw_networkx_edges(Graph, pos, edge_color=avails, width=2, edge_cmap=plt.cm.Greens, edge_vmin=0)
+            plt.colorbar(edges_drawn)
+            plt.axis('off')
+            plt.show()
+    for vis_ondemand_graphs in multi_vis_ondemand_graphs:
+        for Graph in vis_ondemand_graphs:
+            edges = Graph.edges()
+            ondemands = [Graph[u][v]["ondemand"] for u,v in edges]
+            nx.draw_networkx_nodes(Graph, pos)
+            nx.draw_networkx_labels(Graph, pos)
+            edges_drawn = nx.draw_networkx_edges(Graph, pos, edge_color=ondemands, width=2, edge_cmap=plt.cm.Reds, edge_vmin=0)
+            plt.colorbar(edges_drawn)
+            plt.axis('off')
+            plt.show()
+
+    import json
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import pandas as pd
+    from collections import defaultdict
+
+    # Load both JSON files
+    datasets = {}
+    for i in range(2):
+        with open(f"data_adaptive_{i}.json", "r") as f:
+            datasets[f"Run {i + 1}"] = json.load(f)
+
+    # Convert data to a flat list of dictionaries for pandas
+    records = []
+    for run_name, data in datasets.items():
+        latencies_batches = data["latencies"]
+        n_hops_batches = data["n_hops"]
+
+        for lat_batch, hop_batch in zip(latencies_batches, n_hops_batches):
+            for latency, hops in zip(lat_batch, hop_batch):
+                records.append({
+                    "Latency [ms]": latency,
+                    "Number of Hops": hops,
+                    "Run": run_name
+                })
+
+    # Create a DataFrame
+    df = pd.DataFrame(records)
+
+    # Plotting
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(x="Number of Hops", y="Latency [ms]", hue="Run", data=df, width=0.8, dodge=True)
+    plt.ylim(0, 400)
+    plt.title("Latency Distribution by Number of Hops (Comparison of Runs)")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
