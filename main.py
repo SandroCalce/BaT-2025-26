@@ -17,7 +17,7 @@ GENERATE_NEW_NET = False
 TRAFFIC_MATRIX = "traffic_matrix.json"
 GENERATE_NEW_TRAFFIC = True
 RANDOM_REQUESTS = True
-NET_SIZE = 20
+NET_SIZE = 1000
 NET_TYPE = "as_net"
 CONTINUOUS_SCHEME = "adaptive"
 
@@ -540,7 +540,7 @@ if __name__ == "__main__":
     # Plotting
     plt.figure(figsize=(12, 6))
     sns.boxplot(x="Number of Hops", y="Latency [ms]", hue="Run", data=df, width=0.8, dodge=True, palette="Set2")
-    plt.ylim(0, 400)
+
     plt.title("Latency Distribution by Number of Hops (Comparison of Runs)")
     plt.grid(True)
     handles, labels = plt.gca().get_legend_handles_labels()
