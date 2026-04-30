@@ -145,20 +145,21 @@ class Request:
     """Class representing single requests for generating entanglement between two nodes.
 
     Attributes:
+        uid (int): Unique identifier for the request
         submit_time (int): time to submit the request
         start_time (int): time when the network starts to serve the request
         pair (Tuple[int, int]): keeps track of labels of origin and destination nodes of the request
         route (List[int]): route of nodes for entanglement connection to complete the request
     """
 
-    def __init__(self, submit_time, pair):
+    def __init__(self, submit_time, pair, uid):
         """Constructor of a request instance.
 
         Args:
             submit_time (int): time to submit the request
             pair (Tuple[int, int]): keeps track of labels of origin and destination nodes of the request
         """
-
+        self.uid = uid
         self.submit_time = submit_time
         self.start_time = submit_time  # start time is no earlier than submit time
         self.pair = pair
@@ -185,7 +186,6 @@ class Request:
         while u_curr != end:
             node = nodes[u_curr]
             virtual_neighbors = [n for n, count in node.entanglement_link_nums.items() if count > 1]
-            # print(virtual_neighbors)
             if len(virtual_neighbors) == 0:
                 u = shortest_path(G, u_curr, end)[1]
             else:
