@@ -7,6 +7,7 @@ import numpy as np
 import time as systime
 import matplotlib.pyplot as plt
 
+import datetime
 from numpy.random import default_rng
 from networkx import Graph
 
@@ -70,8 +71,15 @@ if __name__ == "__main__":
         assert len(memo_sizes) == NET_SIZE
     G = nx.Graph(graph_arr)
     pos = nx.spring_layout(G)
+    plt.figure(figsize=(10, 8))
     nx.draw_networkx(G, pos)
-    plt.show()
+    plt.title(f"Network Topology: {NET_TYPE} (Size: {NET_SIZE})")
+    
+    # Save the graph
+    timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    filepath = os.path.join("stats", f"network_topology_{timestamp}.png")
+    plt.savefig(filepath, dpi=300, bbox_inches='tight')
+    print(f"Network topology graph saved to: {filepath}")
 
     G_temp = nx.Graph(graph_arr)
     stable_pos = nx.spring_layout(G_temp, seed=42)
