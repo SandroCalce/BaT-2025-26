@@ -1,9 +1,8 @@
-from math import sqrt
-
 import json
 import networkx as nx
 import numpy as np
 
+from math import sqrt
 
 def gen_network_json(filename, size, net_type, seed=0):
     if net_type == "ring":
@@ -24,14 +23,14 @@ def gen_network_json(filename, size, net_type, seed=0):
     else:
         raise ValueError("Unknown graph type " + net_type)
 
-    fh = open(filename, 'w')
-    topo = {"array": arr.tolist()}
-    json.dump(topo, fh)
+    with open(filename, 'w') as fh:
+        topo = {"array": arr.tolist()}
+        json.dump(topo, fh)
     return arr
 
 
-# generator of traffic matrix 
 def gen_traffic_mtx(node_num, rng):
+    """Generator of traffic matrix."""
     mtx = rng.random((node_num, node_num))
     for i in range(node_num):
         mtx[i, i] = 0  # no self-to-self traffic
@@ -39,8 +38,8 @@ def gen_traffic_mtx(node_num, rng):
     return mtx
 
 
-# generator of request node pair queue
 def gen_pair_queue(traffic_mtx, node_num, queue_len, rng_mtx, rng_judge):
+    """Generator of request node pair queue."""
     queue = []
     idx = 0
     while idx < queue_len:

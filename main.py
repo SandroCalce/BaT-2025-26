@@ -1,16 +1,25 @@
-import time as systime
 import os
-
-from src.qn_sim.visualization.plots import Plots
-from matplotlib import pyplot as plt
 import tempfile
 import shutil
-from numpy.random import default_rng
+import json
+import networkx as nx
+import numpy as np
+import time as systime
+import matplotlib.pyplot as plt
 
-from simulation_core import *
+from numpy.random import default_rng
 from networkx import Graph
+
+from src.qn_sim.core.topology import (
+    gen_network_json,
+    gen_traffic_mtx,
+    gen_pair_queue,
+    gen_request_time_list
+)
 from src.qn_sim.models.node import Node
 from src.qn_sim.protocols.request import Request
+
+from src.qn_sim.visualization.plots import Plots
 from src.qn_sim.visualization.display_logger import DisplayLogger
 
 # Network parameters
