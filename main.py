@@ -30,7 +30,7 @@ GENERATE_NEW_NET = True
 TRAFFIC_MATRIX = "traffic_matrix.json"
 GENERATE_NEW_TRAFFIC = True
 RANDOM_REQUESTS = True
-NET_SIZE = 20
+NET_SIZE = 100
 NET_TYPE = "as_net"
 CONTINUOUS_SCHEME = "adaptive"
 SHORTCUT_STRATEGY = 'combined' # combined / champion
@@ -46,7 +46,7 @@ ADAPT_WEIGHT = 0.05
 # Simulation parameters
 SIM_SEED = 0
 END_TIME = 10000
-NUM_TRIALS = 100
+NUM_TRIALS = 10
 QUEUE_LEN = 100
 QUEUE_INT = 5
 QUEUE_START = 1
