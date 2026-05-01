@@ -86,7 +86,6 @@ if __name__ == "__main__":
 
     multi_vis_available_graphs = []
     multi_vis_ondemand_graphs = []
-    # all_schemes = ["uniform"]
     all_schemes = ["powerlaw", "uniform", "adaptive"]
 
     evaluation_data = {
@@ -157,6 +156,21 @@ if __name__ == "__main__":
                 #ENABLE LOGGER HERE:
                 # if trial == 0:  # Only debug the first trial
                     # logger = DisplayLogger(graph_arr, nodes_layout_pos=stable_pos, shortcut_path=computed_shortcut_path, scheme=scheme, z=z)
+                # Generate request node pair queue
+                if RANDOM_REQUESTS:
+                    pair_queue = gen_pair_queue(traffic_mtx, NET_SIZE, QUEUE_LEN, rng, rng)
+                else:
+                    pair_queue = [(16, 5), (13, 6), (15, 10), (11, 4), (10, 15), (16, 5), (13, 6), (15, 10), (11, 4), (10, 15)]
+                # Generate request submission time list with constant interval
+                time_list = gen_request_time_list(QUEUE_START, QUEUE_LEN, interval=QUEUE_INT)
+                # Generate request stack
+                request_stack = [Request(time, pair, uid=i) for i, (time, pair) in
+                                 enumerate(zip(time_list, pair_queue))]
+
+                logger = None
+                #ENABLE LOGGER HERE:
+                if trial == 0:  # Only debug the first trial
+                    logger = DisplayLogger(graph_arr, nodes_layout_pos=stable_pos, shortcut_path=computed_shortcut_path, scheme=scheme, z=z)
 
                 """ Run Simulation"""
                 engine = SimulationEngine(graph_arr, nodes, request_stack, z, seed=SIM_SEED, logger=logger)

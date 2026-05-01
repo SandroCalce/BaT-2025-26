@@ -66,7 +66,7 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
         self.alpha = adapt_param
         self.neighbors = neighbors
 
-        init_prob = 1 / len(neighbors)
+        init_prob = 1/len(neighbors)
         self.prob_dist = {neighbor: init_prob for neighbor in neighbors}
         self.starting_prob_dist = self.prob_dist
 
