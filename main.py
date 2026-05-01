@@ -8,8 +8,9 @@ import shutil
 from numpy.random import default_rng
 
 from simulation_core import *
+from networkx import Graph
 from src.qn_sim.models.node import Node
-from protocols import *
+from src.qn_sim.protocols.request import Request
 from src.qn_sim.visualization.display_logger import DisplayLogger
 
 # Network parameters

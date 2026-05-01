@@ -1,11 +1,8 @@
 from numpy.random import default_rng
 from networkx import Graph, shortest_path
 
-# Relative import for Memory
 from .memory import Memory
-
-# We still import protocols from root for now, as it hasn't been moved yet
-import protocols
+from ..protocols.generation import AdaptiveGenerationProtocol, PowerLawGenerationProtocol, UniformGenerationProtocol
 
 class Node:
     """Class of network nodes.
@@ -73,11 +70,11 @@ class Node:
     def set_generation_protocol(self, protocol_type, adapt_param):
         if protocol_type == "adaptive":
             neighbors = [j for j, element in enumerate(self.network[self.label]) if element != 0]
-            self.generation_protocol = protocols.AdaptiveGenerationProtocol(self, adapt_param, neighbors)
+            self.generation_protocol = AdaptiveGenerationProtocol(self, adapt_param, neighbors)
         elif protocol_type == "powerlaw":
-            self.generation_protocol = protocols.PowerLawGenerationProtocol(self, self.network)
+            self.generation_protocol = PowerLawGenerationProtocol(self, self.network)
         elif protocol_type == "uniform":
-            self.generation_protocol = protocols.UniformGenerationProtocol(self, self.network)
+            self.generation_protocol = UniformGenerationProtocol(self, self.network)
         else:
             raise ValueError("Invalid generation type " + protocol_type)
 
