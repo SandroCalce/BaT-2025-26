@@ -643,7 +643,7 @@ if __name__ == "__main__":
             multi_vis_ondemand_graphs.append(vis_ondemand_graphs)
 
             # save data
-            filename = "data_" + CONTINUOUS_SCHEME + "_" + str(z) + ".json"
+            filename = os.path.join("data", "data_" + CONTINUOUS_SCHEME + "_" + str(z) + ".json")
             data = {
                 "latencies": latencies_list,
                 "n_hops": n_hops_list,
@@ -653,7 +653,8 @@ if __name__ == "__main__":
                 "accumulated_available_patterns": available_accum,
                 "accumulated_ondemand_patterns": ondemand_accum
             }
-            os.remove(filename)
+            if os.path.exists(filename):
+                os.remove(filename)
 
             # Atomic write to prevent partial file
             with tempfile.NamedTemporaryFile('w', delete=False) as tmp:
@@ -728,7 +729,7 @@ if __name__ == "__main__":
     datasets = {}
     for i in range(2):
         for scheme in all_schemes:
-            with open(f"data_{scheme}_{i}.json", "r") as f:
+            with open(os.path.join("data", f"data_{scheme}_{i}.json"), "r") as f:
                 datasets[f"{scheme} {i + 1}"] = json.load(f)
 
     # Convert data to a flat list of dictionaries for pandas
@@ -765,7 +766,7 @@ if __name__ == "__main__":
     plt.show()
 
     # Load data
-    with open("data_adaptive_1.json", "r") as f:
+    with open(os.path.join("data", "data_adaptive_1.json"), "r") as f:
         data = json.load(f)
 
     # Build records: each (trial index, hop value)
