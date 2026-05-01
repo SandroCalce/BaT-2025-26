@@ -2,8 +2,7 @@ import time as systime
 import os
 import datetime
 
-from Plots import Plots
-
+from src.qn_sim.visualization.plots import Plots
 import numpy as np
 import requests
 from matplotlib import pyplot as plt
@@ -14,7 +13,7 @@ import shutil
 from simulation_core import *
 from hardware import *
 from protocols import *
-from DisplayLogger import DisplayLogger
+from src.qn_sim.visualization.display_logger import DisplayLogger
 
 # Network parameters
 CONFIG = "network_customized.json"
@@ -36,8 +35,8 @@ ADAPT_WEIGHT = 0.05
 # Simulation parameters
 SIM_SEED = 0
 END_TIME = 10000
-NUM_TRIALS = 100
-QUEUE_LEN = 100
+NUM_TRIALS = 10
+QUEUE_LEN = 10
 QUEUE_INT = 5
 QUEUE_START = 1
 
