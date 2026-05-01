@@ -1,4 +1,6 @@
 from abc import ABC
+
+import networkx as nx
 from networkx import Graph, shortest_path
 
 
@@ -103,7 +105,7 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
         self.alpha = adapt_param
         self.neighbors = neighbors
 
-        init_prob = 1/len(neighbors)
+        init_prob = 1 / len(neighbors)
         self.prob_dist = {neighbor: init_prob for neighbor in neighbors}
         self.starting_prob_dist = self.prob_dist
 
@@ -127,7 +129,7 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
         # increase probability for links in T
         if len(T) > 0:
             sum_st = sum([self.prob_dist[i] for i in (S | T)])
-            new_prob_increase = (self.alpha/len(T)) * (1 - sum_st)
+            new_prob_increase = (self.alpha / len(T)) * (1 - sum_st)
             for t in T:
                 self.prob_dist[t] += new_prob_increase
 
@@ -143,22 +145,23 @@ class Request:
     """Class representing single requests for generating entanglement between two nodes.
 
     Attributes:
+        uid (int): Unique identifier for the request
         submit_time (int): time to submit the request
         start_time (int): time when the network starts to serve the request
         pair (Tuple[int, int]): keeps track of labels of origin and destination nodes of the request
         route (List[int]): route of nodes for entanglement connection to complete the request
     """
 
-    def __init__(self, submit_time, pair):
+    def __init__(self, submit_time, pair, uid):
         """Constructor of a request instance.
 
         Args:
             submit_time (int): time to submit the request
             pair (Tuple[int, int]): keeps track of labels of origin and destination nodes of the request
         """
-
+        self.uid = uid
         self.submit_time = submit_time
-        self.start_time = submit_time # start time is no earlier than submit time
+        self.start_time = submit_time  # start time is no earlier than submit time
         self.pair = pair
         self.route = None
 
