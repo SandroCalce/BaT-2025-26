@@ -49,6 +49,10 @@ QUEUE_INT = 5
 QUEUE_START = 1
 
 if __name__ == "__main__":
+    # Ensure necessary directories exist
+    for folder in ["data", "stats", "logs"]:
+        os.makedirs(folder, exist_ok=True)
+
     # Setup rng
     rng = default_rng(SIM_SEED)
 
@@ -151,8 +155,8 @@ if __name__ == "__main__":
 
                 logger = None
                 #ENABLE LOGGER HERE:
-                if trial == 0:  # Only debug the first trial
-                    logger = DisplayLogger(graph_arr, nodes_layout_pos=stable_pos, shortcut_path=computed_shortcut_path, scheme=scheme, z=z)
+                # if trial == 0:  # Only debug the first trial
+                    # logger = DisplayLogger(graph_arr, nodes_layout_pos=stable_pos, shortcut_path=computed_shortcut_path, scheme=scheme, z=z)
 
                 """ Run Simulation"""
                 engine = SimulationEngine(graph_arr, nodes, request_stack, z, seed=SIM_SEED, logger=logger)
@@ -270,6 +274,7 @@ if __name__ == "__main__":
 
     p.plot_timing_schemes(evaluation_data['request_completion'])
     p.plot_win_percentage(evaluation_data['request_completion'])
+    p.plot_service_win_percentage(evaluation_data['request_completion'])
     number_of_complete_requests = {}
     for key in evaluation_data['request_completion'].keys():
         number_of_complete_requests[key] = {}

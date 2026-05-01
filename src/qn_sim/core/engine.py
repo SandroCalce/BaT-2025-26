@@ -303,7 +303,7 @@ class SimulationEngine:
                 self.n_hops.append(len(self.current_request.route) - 1)
                 self.entanglement_usage_pattern["ondemand"].append(self.entanglement_ondemand)
                 self.entanglement_ondemand = []
-                self.process_data['request_completion'].append((self.current_request.uid, self.sim_time))
+                self.process_data['request_completion'].append((self.current_request.uid, self.sim_time, serve_time))
                 
                 if self.z == 1 and self.sc_start.label in self.route and self.sc_end.label in self.route:
                     self.process_data['shortcut_taken'] += 1
