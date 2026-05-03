@@ -1,8 +1,9 @@
-from math import inf
+from fontTools.merge.util import current_time
 from numpy.random import default_rng
 from networkx import Graph, shortest_path
-from protocols import *
 
+from .memory import Memory
+from ..protocols.generation import AdaptiveGenerationProtocol, PowerLawGenerationProtocol, UniformGenerationProtocol
 
 class Node:
     """Class of network nodes.
@@ -88,7 +89,6 @@ class Node:
         temp_idx = self._next_avail_memory
         while temp_idx < self.memo_size:
             mem = self.memories[temp_idx]
-
             is_fresh = (mem.last_update_time < current_time)
             # CHECK: If it's not reserved AND not a locked fixture
             if not mem.reserved and not mem.sc_fixed and is_fresh:
@@ -124,6 +124,7 @@ class Node:
         memory.expire()
         self.memo_free(memory)
 
+        # Pass events to the recursive call to see the full chain
         other_node.memo_expire(other_memory)
 
     def create_random_link(self, time):
@@ -139,6 +140,7 @@ class Node:
         Args:
             time (int): time of link creation (from main simulation loop).
             other_node (Node): node to generate entanglement with.
+            events (List, optional): List to log events to.
 
         Returns:
             bool: if creation succeeded (True) or failed (False).
@@ -179,15 +181,17 @@ class Node:
         Args:
             time (int): time of link creation (from main simulation loop).
             other_node (Node): node to generate entanglement with.
+            events (List, optional): List to log events to.
         """
 
         # --- 1. Reserve Local Memory ---
         local_memo = self.memo_reserve(time)
         if local_memo is None:
             # Try to find a non-fixed memory to expire
-            valid_memo = [id for id, mem in enumerate(self.memories) if not mem.sc_fixed]
+            valid_memo = [id for id, mem in enumerate(self.memories) if (not mem.sc_fixed) and (mem.last_update_time < time)]
             if len(valid_memo) > 0:
                 memo_id = self.rng.choice(valid_memo)
+                # Pass events to memo_expire to see WHAT we are overwriting
                 self.memo_expire(self.memories[memo_id])
                 local_memo = self.memo_reserve(time)
 
@@ -196,9 +200,10 @@ class Node:
             return False
 
         # --- 2. Reserve Other Node Memory ---
+
         other_memo = other_node.memo_reserve(time)
         if other_memo is None:
-            valid_memo = [id for id, mem in enumerate(other_node.memories) if not mem.sc_fixed]
+            valid_memo = [id for id, mem in enumerate(other_node.memories) if (not mem.sc_fixed) and (mem.last_update_time < time)]
             if len(valid_memo) > 0:
                 memo_id = other_node.rng.choice(valid_memo)
                 other_node.memo_expire(other_node.memories[memo_id])
@@ -238,14 +243,14 @@ class Node:
         assert memory1 in self.memories and memory2 in self.memories
 
         if not memory1.reserved or not memory2.reserved:
-            return False
+            return [False, 'Normal']
 
         # Additional safety check: make sure memories are actually entangled
         if memory1.entangled_memory["node"] is None or memory2.entangled_memory["node"] is None:
-            return False
+            return [False, 'Normal']
 
         if memory1.last_update_time >= current_time or memory2.last_update_time >= current_time:
-            return False
+            return [False, 'Normal']
 
         if sc_start is not None and sc_end is not None:
 
@@ -268,7 +273,7 @@ class Node:
             if has_link_to_start and has_link_to_end:
                 # This swap connects sc_start to sc_end directly.
                 # It creates the "Fixed" infrastructure.
-                return self._swap_sc(memory1, memory2)
+                return self._swap_sc(memory1, memory2, current_time)
 
             # --- CASE 2: USING THE SHORTCUT (_swap_sc_one) ---
             # Condition: I AM the Start or I AM the End node.
@@ -293,7 +298,7 @@ class Node:
                     if sc_memory.sc_fixed:
                         # We are at an endpoint, swapping the fixed link with a dynamic neighbor.
                         # This executes the "Copy and Transfer" logic.
-                        return self._swap_sc_one(memory1, memory2, target_node_obj)
+                        return self._swap_sc_one(memory1, memory2, target_node_obj, current_time)
                     # Otherwise fall through to regular swap
 
         memo1 = memory1.entangled_memory["memo"]
@@ -316,21 +321,24 @@ class Node:
             memo1.entangled_memory["memo"] = memo2
             memo2.entangled_memory["memo"] = memo1
 
+            memo1.last_update_time = current_time
+            memo2.last_update_time = current_time
+
             # update entanglement count
             node1.entanglement_link_nums[self.label] -= 1
             node2.entanglement_link_nums[self.label] -= 1
             node1.entanglement_link_nums[node2.label] += 1
             node2.entanglement_link_nums[node1.label] += 1
 
-            return True
+            return [True, 'Normal']
 
         else:
             # if unsuccessful, all involved memories entanglement reset
             node1.memo_expire(memo1)
             node2.memo_expire(memo2)
-            return False
+            return [False, 'Normal']
 
-    def _swap_sc(self, memory1, memory2):
+    def _swap_sc(self, memory1, memory2, current_time):
         memo1 = memory1.entangled_memory["memo"]
         memo2 = memory2.entangled_memory["memo"]
         node1 = memory1.entangled_memory["node"]
@@ -352,21 +360,24 @@ class Node:
             memo1.entangled_memory["memo"] = memo2
             memo2.entangled_memory["memo"] = memo1
 
+            memo1.last_update_time = current_time
+            memo2.last_update_time = current_time
+
             # update entanglement count
             node1.entanglement_link_nums[self.label] -= 1
             node2.entanglement_link_nums[self.label] -= 1
             node1.entanglement_link_nums[node2.label] += 1
             node2.entanglement_link_nums[node1.label] += 1
 
-            return True
+            return [True, 'SC']
 
         else:
             # if unsuccessful, all involved memories entanglement reset
             node1.memo_expire(memo1)
             node2.memo_expire(memo2)
-            return False
+            return [False, 'SC']
 
-    def _swap_sc_one(self, memory1, memory2, sc_node):
+    def _swap_sc_one(self, memory1, memory2, sc_node, current_time):
         """
         Swaps a shortcut memory with a dynamic memory, RELEASING the shortcut link.
 
@@ -392,7 +403,7 @@ class Node:
 
         # Check if we'd be creating a duplicate link
         if remote_sc_node.entanglement_link_nums.get(remote_path_node.label, 0) > 0:
-            return False
+            return [False, 'SC']
 
         if self.rng.random() < self.swap_success_prob:
             # --- SUCCESSFUL SWAP ---
@@ -403,6 +414,7 @@ class Node:
 
             remote_sc_memo.entangled_memory["node"] = remote_path_node
             remote_sc_memo.entangled_memory["memo"] = remote_path_memo
+            remote_sc_memo.last_update_time = current_time
             remote_sc_memo.entangled_memory["expire_time"] = expire_time
             remote_sc_memo.sc_fixed = False  # No longer a fixed shortcut
             # IMPORTANT: Keep remote_sc_memo.reserved = True
@@ -410,6 +422,7 @@ class Node:
             # Update the path node's memory to point to the SC node
             remote_path_memo.entangled_memory["node"] = remote_sc_node
             remote_path_memo.entangled_memory["memo"] = remote_sc_memo
+            remote_path_memo.last_update_time = current_time
             # remote_path_memo stays reserved as it was
 
             # Step B: Release the LOCAL shortcut memory
@@ -434,7 +447,7 @@ class Node:
             remote_sc_node.entanglement_link_nums[remote_path_node.label] += 1
             remote_path_node.entanglement_link_nums[remote_sc_node.label] += 1
 
-            return True
+            return [True, 'SC']
 
         else:
             # --- FAILURE ---
@@ -455,62 +468,4 @@ class Node:
             # Break the path connection (this calls memo_expire which handles the other node)
             remote_path_node.memo_expire(remote_path_memo)
 
-            return False
-
-class Memory:
-    """Simplified class of quantum memories to be stored in a node.
-
-    Omitting details of memory efficiency, quantum state fidelity, photon wavelength, memory maximal frequency of reuse, etc.
-
-    Attributes:
-        name (str): name of a memory array instance
-        owner (Node): node object which holds this memory.
-        lifetime (int): quantum memory lifetime in unit of simulation time step, represents time to store quantum entanglement
-        reserved (bool): indicates if the memory has been reserved by the owning node.
-        sc_fixed (bool): indicates if the shortcuts uses this memory.
-        entangled_memory (Dict[str, any]): records information on another memory sharing entanglement (if it exists).
-    """
-
-    def __init__(self, name, lifetime):
-        """Constructor of memory instance.
-
-        Args:
-            name (str): name of memory instance
-            lifetime (int): quantum memory lifetime in unit of simulation time step, represents time to store quantum entanglement
-        """
-
-        self.name = name
-        self.owner = None
-        self.lifetime = lifetime
-        self.reserved = False  # Boolean representing if the memory has been reserved for use
-        self.sc_fixed = False
-
-        self.last_update_time = -1
-
-        self.entangled_memory = {"node": None, "memo": None, "expire_time": None}
-
-    def entangle(self, memory, time):
-        self.entangled_memory = {"node": memory.owner, "memo": memory, "expire_time": time + self.lifetime}
-        # the other memory should also update its entanglement information
-        memory.entangled_memory = {"node": self.owner, "memo": self, "expire_time": time + memory.lifetime}
-        self.last_update_time = time
-        memory.last_update_time = time
-
-    def set_owner(self, node):
-        self.owner = node
-
-    def reserve(self):
-        if not self.reserved:
-            self.reserved = True
-        else:
-            raise Exception("This memory has already been reserved")
-
-    def free(self):
-        if self.reserved:
-            self.reserved = False
-        else:
-            raise Exception("This memory is not reserved")
-
-    def expire(self):
-        self.entangled_memory = {"node": None, "memo": None, "expire_time": None}
-        self.sc_fixed = False
+            return [False, 'SC']

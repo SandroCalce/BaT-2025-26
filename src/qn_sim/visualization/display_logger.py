@@ -110,6 +110,12 @@ class DisplayLogger:
         self.log_stats = tk.Text(self.tab_stats, height=30, width=50, font=("Consolas", 9))
         self.log_stats.pack(fill=tk.BOTH, expand=True)
 
+        # Tab 5: Node Status (NEW)
+        self.tab_node_status = tk.Frame(self.notebook)
+        self.notebook.add(self.tab_node_status, text="Node Status")
+        self.log_node_status = tk.Text(self.tab_node_status, height=30, width=50, font=("Consolas", 9))
+        self.log_node_status.pack(fill=tk.BOTH, expand=True)
+
         # --- Bottom Control Panel ---
         self.control_frame = tk.Frame(self.root, bg="grey")
         self.control_frame.pack(side=tk.BOTTOM, fill=tk.X)
@@ -216,21 +222,25 @@ class DisplayLogger:
             for e in events:
                 lines.append(f"  {e}")
 
-        # --- NEW: NODE MEMORY STATES ---
+        # --- NODE MEMORY STATES ---
         lines.append("")
-        lines.append("--- NODE MEMORY STATES ---")
+        lines.append("--- DETAILED NODE MEMORY STATES ---")
         if self.history and self.current_step_index >= 0:
             node_states = self.history[self.current_step_index]["nodes_state"]
             for node_idx, state in node_states.items():
-                if state['entanglements']:
-                    links_str = ""
-                    for t in state['entanglements']:
-                        # t is (label, is_fixed)
-                        tag = " [FIXED]" if t[1] else ""
-                        links_str += f"-> Node {t[0]}{tag} | "
-
-                    prefix = "[SC]" if state['is_shortcut_node'] else "    "
-                    lines.append(f"  {prefix} Node {node_idx}: {links_str}")
+                prefix = "[SC]" if state['is_shortcut_node'] else "    "
+                lines.append(f"  {prefix} Node {node_idx}:")
+                for mem in state["memories"]:
+                    status = "FREE"
+                    if mem["reserved"]:
+                        status = "RESERVED"
+                    if mem["entangled_node"] is not None:
+                        status = f"ENTANGLED -> Node {mem['entangled_node']}"
+                    if mem["sc_fixed"]:
+                        status += " [FIXED]"
+                    
+                    expire = f" (Expires: {mem['expire_time']})" if mem["expire_time"] is not None else ""
+                    lines.append(f"      Memo {mem['id']}: {status}{expire}")
 
         lines.append("")
         lines.append("--- STATISTICS ---")
@@ -315,20 +325,29 @@ class DisplayLogger:
         return stats
 
     def _extract_node_states(self, nodes):
-        """Updated to pass memory flags (is_fixed) to the renderer"""
+        """Updated to capture full state for every memory of every node"""
         states = {}
         for n in nodes:
-            entanglements = []
-            for mem in n.memories:
+            memories_info = []
+            for i, mem in enumerate(n.memories):
+                entangled_node_label = None
+                expire_time = None
                 if mem.entangled_memory and mem.entangled_memory["node"]:
-                    target_label = mem.entangled_memory["node"].label
-                    # Store tuple: (target_label, is_fixed_memory)
-                    entanglements.append((target_label, mem.sc_fixed))
+                    entangled_node_label = mem.entangled_memory["node"].label
+                    expire_time = mem.entangled_memory["expire_time"]
+                
+                memories_info.append({
+                    "id": i,
+                    "reserved": mem.reserved,
+                    "sc_fixed": mem.sc_fixed,
+                    "entangled_node": entangled_node_label,
+                    "expire_time": expire_time
+                })
 
             states[n.label] = {
-                "memories_used": len([m for m in n.memories if m.entangled_memory["node"] is not None]),
-                "entanglements": entanglements,
-                "is_shortcut_node": n.label in self.shortcut_nodes
+                "memories": memories_info,
+                "is_shortcut_node": n.label in self.shortcut_nodes,
+                "entanglements": [(m["entangled_node"], m["sc_fixed"]) for m in memories_info if m["entangled_node"] is not None]
             }
         return states
 
@@ -452,6 +471,25 @@ class DisplayLogger:
 
                 prefix = "[SC]" if state['is_shortcut_node'] else "   "
                 self.log_all.insert(tk.END, f"{prefix} Node {node_idx}: {links_str}\n")
+
+        # Update Node Status Tab (NEW)
+        self.log_node_status.delete(1.0, tk.END)
+        self.log_node_status.insert(tk.END, f"=== NODE STATUS @ Time {data['time']} ===\n\n")
+        for node_idx, state in node_states.items():
+            prefix = "[SC]" if state['is_shortcut_node'] else "    "
+            self.log_node_status.insert(tk.END, f"{prefix} Node {node_idx}:\n")
+            for mem in state["memories"]:
+                status = "FREE"
+                if mem["reserved"]:
+                    status = "RESERVED"
+                if mem["entangled_node"] is not None:
+                    status = f"ENTANGLED -> Node {mem['entangled_node']}"
+                if mem["sc_fixed"]:
+                    status += " [FIXED]"
+                
+                expire = f" (Expires: {mem['expire_time']})" if mem["expire_time"] is not None else ""
+                self.log_node_status.insert(tk.END, f"      Memo {mem['id']}: {status}{expire}\n")
+            self.log_node_status.insert(tk.END, "\n")
 
     # --- Button Commands ---
     def go_forward(self):

@@ -1,44 +1,5 @@
-from abc import ABC
-
-import networkx as nx
 from networkx import Graph, shortest_path
-
-
-class GenerationProtocol(ABC):
-    """Class representing protocol to generate entanglement links.
-
-    Attributes:
-        node (Node): node hosting the protocol instance.
-        prob_dist (Dict[int, float]): probability distribution to select direct neighbors to generate entanglement.
-    """
-
-    def __init__(self, node):
-        """Constructor of entanglement generation protocol instance.
-
-        Args:
-            node (Node): node hosting the protocol instance.
-        """
-        self.node = node
-        self.prob_dist = {}
-        self.starting_prob_dist = {}
-
-    def reset(self):
-        self.prob_dist = self.starting_prob_dist
-
-    def update_dist(self, links_available, links_used):
-        pass
-
-    def choose_link(self):
-        """Method to choose a link to attempt entanglement.
-
-        Returns:
-            int: label of node chosen for entanglement
-        """
-
-        choices = list(self.prob_dist.keys())
-        probs = list(self.prob_dist.values())
-        return self.node.rng.choice(choices, p=probs)
-
+from .base import GenerationProtocol
 
 class UniformGenerationProtocol(GenerationProtocol):
     """Class representing protocol to generate entanglement links.
@@ -105,7 +66,7 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
         self.alpha = adapt_param
         self.neighbors = neighbors
 
-        init_prob = 1 / len(neighbors)
+        init_prob = 1/len(neighbors)
         self.prob_dist = {neighbor: init_prob for neighbor in neighbors}
         self.starting_prob_dist = self.prob_dist
 
@@ -139,67 +100,3 @@ class AdaptiveGenerationProtocol(GenerationProtocol):
             new_prob = (1 - sum_st_new) / len(not_used)
             for i in not_used:
                 self.prob_dist[i] = new_prob
-
-
-class Request:
-    """Class representing single requests for generating entanglement between two nodes.
-
-    Attributes:
-        uid (int): Unique identifier for the request
-        submit_time (int): time to submit the request
-        start_time (int): time when the network starts to serve the request
-        pair (Tuple[int, int]): keeps track of labels of origin and destination nodes of the request
-        route (List[int]): route of nodes for entanglement connection to complete the request
-    """
-
-    def __init__(self, submit_time, pair, uid):
-        """Constructor of a request instance.
-
-        Args:
-            submit_time (int): time to submit the request
-            pair (Tuple[int, int]): keeps track of labels of origin and destination nodes of the request
-        """
-        self.uid = uid
-        self.submit_time = submit_time
-        self.start_time = submit_time  # start time is no earlier than submit time
-        self.pair = pair
-        self.route = None
-
-    def get_path(self, network, nodes):
-        """Get optimal path to service request.
-
-        Uses local best effort algorithm based on number of existing entanglement links.
-
-        Args:
-            network (numpy.ndarray): Adjacency matrix for the network.
-            nodes (List[Node]): List of node objects for the network, contains current entanglement info.
-
-        Returns:
-            List[int]: Optimal path as list of node labels.
-        """
-
-        G = Graph(network)
-        end = self.pair[1]
-        u_curr = self.pair[0]
-        path = [u_curr]
-
-        while u_curr != end:
-            node = nodes[u_curr]
-            virtual_neighbors = [n for n, count in node.entanglement_link_nums.items() if count > 1]
-            if len(virtual_neighbors) == 0:
-                u = shortest_path(G, u_curr, end)[1]
-            else:
-                distances = [len(shortest_path(G, v, end)) - 1 for v in virtual_neighbors]
-                minimum_distance = min(distances)
-
-                u = virtual_neighbors[distances.index(minimum_distance)]
-                if len(shortest_path(G, u_curr, end)) <= len(shortest_path(G, u, end)):
-                    u = shortest_path(G, u_curr, end)[1]
-            """
-            zweiter graph testen mit wormhole link für shortest path
-            """
-
-            path.append(u)
-            u_curr = u
-
-        return path

@@ -70,8 +70,8 @@ class Plots:
                     color = colors['shortcut'] if shortcut_flag else colors['no_shortcut']
                     label = "With Shortcut" if shortcut_flag else "No Shortcut"
 
-                    x = [req for req, _ in trial_data]
-                    y = [t for _, t in trial_data]
+                    x = [req for req, _, _ in trial_data]
+                    y = [t for _, t, _ in trial_data]
 
                     # Plot with markers and improved styling
                     ax.plot(x, y, color=color, linewidth=2.5, alpha=0.85,
@@ -140,7 +140,7 @@ class Plots:
             for shortcut_flag in [0, 1]:
                 trials = scheme_data.get(shortcut_flag, {})
                 for trial_idx, trial_data in trials.items():
-                    for req_idx, _ in trial_data:
+                    for req_idx, _, _ in trial_data:
                         all_request_indices.add(req_idx)
 
             if not all_request_indices:
@@ -172,12 +172,12 @@ class Plots:
                     no_shortcut_time = None
                     shortcut_time = None
 
-                    for req, time in no_shortcut_data:
+                    for req, time, _ in no_shortcut_data:
                         if req == req_idx:
                             no_shortcut_time = time
                             break
 
-                    for req, time in shortcut_data:
+                    for req, time, _ in shortcut_data:
                         if req == req_idx:
                             shortcut_time = time
                             break
@@ -261,6 +261,120 @@ class Plots:
             plt.tight_layout()
 
             filename = f"win_percentage_{timestamp}_{scheme_name}.png"
+            filepath = os.path.join(self.output_dir, filename)
+            plt.savefig(filepath, dpi=300, facecolor='#FAFAFA', bbox_inches='tight')
+            plt.close(fig)
+
+    def plot_service_win_percentage(self, data, x_label_interval=10):
+        """
+        Create stacked bar plots showing service time win percentage for each scheme.
+
+        Compares 'serve_time' (active duration) instead of absolute completion time.
+
+        Parameters
+        ----------
+        data : dict
+            Nested dictionary structured as:
+            data[scheme][shortcut_flag][trial] = [(request, end_time, serve_time), ...]
+        x_label_interval : int
+            Show x-axis label every N requests.
+        """
+
+        os.makedirs(self.output_dir, exist_ok=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+
+        colors = {
+            'no_shortcut': '#1F77B4',
+            'shortcut': '#FF7F0E',
+            'tie': '#B0B0B0'
+        }
+
+        for scheme_name, scheme_data in data.items():
+            all_request_indices = set()
+            for shortcut_flag in [0, 1]:
+                trials = scheme_data.get(shortcut_flag, {})
+                for trial_idx, trial_data in trials.items():
+                    for req_idx, _, _ in trial_data:
+                        all_request_indices.add(req_idx)
+
+            if not all_request_indices:
+                continue
+
+            request_indices = sorted(all_request_indices)
+            win_counts = {req_idx: {'no_shortcut': 0, 'shortcut': 0, 'tie': 0}
+                          for req_idx in request_indices}
+
+            num_trials = max(len(scheme_data.get(0, {})), len(scheme_data.get(1, {})))
+
+            for req_idx in request_indices:
+                for trial_idx in range(num_trials):
+                    no_shortcut_trials = scheme_data.get(0, {})
+                    shortcut_trials = scheme_data.get(1, {})
+
+                    no_shortcut_data = no_shortcut_trials.get(trial_idx, [])
+                    shortcut_data = shortcut_trials.get(trial_idx, [])
+
+                    no_shortcut_serve_time = None
+                    shortcut_serve_time = None
+
+                    for req, _, stime in no_shortcut_data:
+                        if req == req_idx:
+                            no_shortcut_serve_time = stime
+                            break
+
+                    for req, _, stime in shortcut_data:
+                        if req == req_idx:
+                            shortcut_serve_time = stime
+                            break
+
+                    if no_shortcut_serve_time is not None and shortcut_serve_time is not None:
+                        if no_shortcut_serve_time < shortcut_serve_time:
+                            win_counts[req_idx]['no_shortcut'] += 1
+                        elif shortcut_serve_time < no_shortcut_serve_time:
+                            win_counts[req_idx]['shortcut'] += 1
+                        else:
+                            win_counts[req_idx]['tie'] += 1
+
+            # Convert counts to percentages
+            win_percentages = {req_idx: {} for req_idx in request_indices}
+            for req_idx in request_indices:
+                total = sum(win_counts[req_idx].values())
+                if total > 0:
+                    win_percentages[req_idx]['no_shortcut'] = (win_counts[req_idx]['no_shortcut'] / total) * 100
+                    win_percentages[req_idx]['shortcut'] = (win_counts[req_idx]['shortcut'] / total) * 100
+                    win_percentages[req_idx]['tie'] = (win_counts[req_idx]['tie'] / total) * 100
+                else:
+                    win_percentages[req_idx] = {'no_shortcut': 0, 'shortcut': 0, 'tie': 0}
+
+            no_shortcut_pct = [win_percentages[req_idx]['no_shortcut'] for req_idx in request_indices]
+            tie_pct = [win_percentages[req_idx]['tie'] for req_idx in request_indices]
+            shortcut_pct = [win_percentages[req_idx]['shortcut'] for req_idx in request_indices]
+
+            fig, ax = plt.subplots(figsize=(20, 8))
+            fig.patch.set_facecolor('#FAFAFA')
+            x_pos = np.arange(len(request_indices))
+
+            ax.bar(x_pos, no_shortcut_pct, color=colors['no_shortcut'], alpha=0.85, label='No Shortcut Faster (Service)', edgecolor='white', linewidth=0.5)
+            ax.bar(x_pos, tie_pct, bottom=no_shortcut_pct, color=colors['tie'], alpha=0.85, label='Ties', edgecolor='white', linewidth=0.5)
+            ax.bar(x_pos, shortcut_pct, bottom=np.array(no_shortcut_pct) + np.array(tie_pct), color=colors['shortcut'], alpha=0.85, label='Shortcut Faster (Service)', edgecolor='white', linewidth=0.5)
+
+            ax.axhline(y=50, color='#333333', linestyle='--', linewidth=1.5, alpha=0.7, label='50% Reference', zorder=10)
+
+            ax.set_facecolor('#FFFFFF')
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.set_xlabel('Request Index', fontsize=12, fontweight='bold', color='#333333')
+            ax.set_ylabel('Service Time Win Percentage (%)', fontsize=12, fontweight='bold', color='#333333')
+            ax.set_title(f'Service Time Efficiency Comparison – {scheme_name}\n(Shortcut vs No Shortcut)', fontsize=14, fontweight='bold', pad=20)
+
+            ax.set_xticks(x_pos)
+            x_labels = [str(req_idx) if i % x_label_interval == 0 else '' for i, req_idx in enumerate(request_indices)]
+            ax.set_xticklabels(x_labels, fontsize=9)
+            ax.set_ylim(0, 100)
+            ax.legend(loc='upper right', frameon=True, fancybox=False, edgecolor='#CCCCCC', framealpha=0.95, fontsize=11)
+
+            plt.tight_layout()
+            filename = f"service_win_percentage_{timestamp}_{scheme_name}.png"
             filepath = os.path.join(self.output_dir, filename)
             plt.savefig(filepath, dpi=300, facecolor='#FAFAFA', bbox_inches='tight')
             plt.close(fig)
