@@ -19,7 +19,7 @@ from src.qn_sim.core.topology import (
 )
 from src.qn_sim.models.node import Node
 from src.qn_sim.protocols.request import Request
-from src.qn_sim.core.engine import SimulationEngine
+from src.qn_sim.core.engine import Engine
 
 from src.qn_sim.visualization.plots import Plots
 from src.qn_sim.visualization.display_logger import DisplayLogger
@@ -33,6 +33,8 @@ RANDOM_REQUESTS = True
 NET_SIZE = 20
 NET_TYPE = "as_net"
 CONTINUOUS_SCHEME = "adaptive"
+SHORTCUT_STRATEGY = 'combined' # combined / champion
+SHORTCUT_MIN_HOPS = 2
 
 # Node parameters
 MEMO_SIZE = 5  # default memory number per node
@@ -116,17 +118,11 @@ if __name__ == "__main__":
             n_hops_list = []
 
             computed_shortcut_path = None
+            shortcut_nodes = None
             if z == 1:
                 G = Graph(graph_arr)
-                between = nx.betweenness_centrality(G, normalized=True, endpoints=True)
-                degree = nx.degree_centrality(G)
-                combined_centrality = {}
-                for node in between:
-                    combined_centrality[node] = between[node] + degree[node]
-
-                sorted_combined_centrality = sorted(combined_centrality.items(), key=lambda x: x[1], reverse=True)
-                highest_node, highest_value = sorted_combined_centrality[0]
-                second_highest_node, second_highest_value = sorted_combined_centrality[1]
+                shortcut_nodes = Engine.select_shortcut_nodes(G, strategy=SHORTCUT_STRATEGY, num_hops=SHORTCUT_MIN_HOPS)
+                highest_node, second_highest_node = shortcut_nodes
 
                 # Create temporary nodes to get the path
                 temp_nodes = [
@@ -181,7 +177,7 @@ if __name__ == "__main__":
                     logger = DisplayLogger(graph_arr, nodes_layout_pos=stable_pos, shortcut_path=computed_shortcut_path, scheme=scheme, z=z)
 
                 """ Run Simulation"""
-                engine = SimulationEngine(graph_arr, nodes, request_stack, z, seed=SIM_SEED, logger=logger)
+                engine = Engine(graph_arr, nodes, request_stack, z, seed=SIM_SEED, logger=logger, shortcut_nodes=shortcut_nodes)
                 latencies, serve_times, congestion, request_complete_times, entanglement_usage_pattern, n_hops, process_data = \
                     engine.run(END_TIME)
 
