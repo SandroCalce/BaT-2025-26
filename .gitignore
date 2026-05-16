@@ -175,7 +175,3 @@ cython_debug/
 .pypirc
 
 logs/
-
-data/
-
-stats/
