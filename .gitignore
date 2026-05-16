@@ -176,6 +176,3 @@ cython_debug/
 
 logs/
 
-data/
-
-stats/

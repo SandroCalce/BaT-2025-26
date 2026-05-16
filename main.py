@@ -26,7 +26,7 @@ from src.qn_sim.visualization.display_logger import DisplayLogger
 
 # Network parameters
 CONFIG = "network_customized.json"
-GENERATE_NEW_NET = True
+GENERATE_NEW_NET = False
 TRAFFIC_MATRIX = "traffic_matrix.json"
 GENERATE_NEW_TRAFFIC = True
 RANDOM_REQUESTS = True
