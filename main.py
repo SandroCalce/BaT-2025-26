@@ -33,7 +33,7 @@ RANDOM_REQUESTS = True
 NET_SIZE = 20
 NET_TYPE = "as_net"
 CONTINUOUS_SCHEME = "adaptive"
-SHORTCUT_STRATEGY = 'combined' # combined / champion
+SHORTCUT_STRATEGY = 'champion' # combined / champion
 SHORTCUT_MIN_HOPS = 2
 
 # Node parameters
