@@ -31,9 +31,9 @@ TRAFFIC_MATRIX = "traffic_matrix.json"
 GENERATE_NEW_TRAFFIC = True
 RANDOM_REQUESTS = True
 NET_SIZE = 20
-NET_TYPE = "as_net"
+NET_TYPE = "ring"
 CONTINUOUS_SCHEME = "adaptive"
-SHORTCUT_STRATEGY = 'combined' # combined / champion
+SHORTCUT_STRATEGY = 'champion' # combined / champion
 SHORTCUT_MIN_HOPS = 2
 
 # Node parameters
