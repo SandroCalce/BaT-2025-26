@@ -6,7 +6,7 @@ from networkx import Graph
 # Core dependencies
 from ..protocols.request import Request
 
-class SimulationEngine:
+class Engine:
     """
     Simulation Engine for Quantum Network Entanglement.
     
@@ -14,7 +14,7 @@ class SimulationEngine:
     swapping, and shortcut mechanisms.
     """
 
-    def __init__(self, graph_arr, nodes, request_stack, z, seed=0, logger=None):
+    def __init__(self, graph_arr, nodes, request_stack, z, seed=0, logger=None, shortcut_nodes=None):
         """
         Initialize the simulation engine.
 
@@ -25,6 +25,7 @@ class SimulationEngine:
             z (int): Shortcut flag (1 to enable shortcut logic).
             seed (int): Random seed for simulation reproducibility.
             logger (DisplayLogger, optional): GUI logger for visualization.
+            shortcut_nodes (tuple, optional): Pre-calculated shortcut (start, end) nodes.
         """
         self.graph_arr = graph_arr
         self.nodes = nodes
@@ -33,6 +34,7 @@ class SimulationEngine:
         self.seed = seed
         self.logger = logger
         self.shuffle_rng = default_rng(seed)
+        self.shortcut_nodes = shortcut_nodes
 
         # Simulation State
         self.sim_time = 0
@@ -67,15 +69,11 @@ class SimulationEngine:
 
     def _initialize_shortcut(self):
         """Pre-calculates and sets up the shortcut infrastructure."""
-        G = Graph(self.graph_arr)
-        between = nx.betweenness_centrality(G, normalized=True, endpoints=True)
-        degree = nx.degree_centrality(G)
-        combined_centrality = {node: between[node] + degree[node] for node in between}
-
-        # Find two most central nodes
-        sorted_nodes = sorted(combined_centrality.items(), key=lambda x: x[1], reverse=True)
-        highest_node = sorted_nodes[0][0]
-        second_highest_node = sorted_nodes[1][0]
+        if self.shortcut_nodes:
+            highest_node, second_highest_node = self.shortcut_nodes
+        else:
+            G = Graph(self.graph_arr)
+            highest_node, second_highest_node = Engine.select_shortcut_nodes(G, strategy='champion')
         
         # Create a dummy request to find the path for the shortcut
         temp_req = Request(0, (highest_node, second_highest_node), -1)
@@ -90,6 +88,47 @@ class SimulationEngine:
             sc_node = self.nodes[label]
             sc_node.sc_left_neighbors_to_connect.append(shortcut_path[:i])
             sc_node.sc_right_neighbors_to_connect.append(shortcut_path[i + 1:])
+
+    @staticmethod
+    def select_shortcut_nodes(G, strategy="combined", num_hops=2):
+        """
+        Main helper function that calculates common network properties
+        and routes to the correct strategy sub-helper for node selection.
+        """
+        # Calculate centrality metrics since most strategies need them
+        between = nx.betweenness_centrality(G, normalized=True, endpoints=True)
+        degree = nx.degree_centrality(G)
+        combined_centrality = {node: between[node] + degree[node] for node in between}
+
+        if strategy == "combined":
+            return Engine.select_by_combined_centrality(combined_centrality)
+        elif strategy == 'champion':
+            return Engine.select_by_champion_partner(G, combined_centrality, num_hops=num_hops)
+        else:
+            raise ValueError(f"Unknown shortcut strategy: {strategy}")
+
+    @staticmethod
+    def select_by_combined_centrality(combined_centrality):
+        """Strategy A: Selects the top 2 overall highest centrality nodes."""
+        sorted_nodes = sorted(combined_centrality.items(), key=lambda x: x[1], reverse=True)
+        highest_node = sorted_nodes[0][0]
+        second_highest_node = sorted_nodes[1][0]
+        return highest_node, second_highest_node
+
+    @staticmethod
+    def select_by_champion_partner(G, score, num_hops=2):
+        sorted_nodes = sorted(score.items(), key=lambda x: x[1], reverse=True)
+        champion_node = sorted_nodes[0][0]
+
+        partner_node = None
+        for node, score_val in score.items():
+            if nx.shortest_path_length(G, champion_node, node) >= num_hops:
+                partner_node = node
+                break
+
+        if partner_node is None:
+            partner_node = sorted_nodes[1][0]
+        return champion_node, partner_node
 
     def _activate_request(self, req):
         """Calculates route and updates node protocols for a request starting NOW."""
