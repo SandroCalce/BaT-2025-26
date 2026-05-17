@@ -271,7 +271,7 @@ if __name__ == "__main__":
             multi_vis_ondemand_graphs.append(vis_ondemand_graphs)
 
             # save data
-            filename = os.path.join(p.output_dir, "data_" + CONTINUOUS_SCHEME + "_" + str(z) + ".json")
+            filename = os.path.join(p.data_dir, "data_" + CONTINUOUS_SCHEME + "_" + str(z) + ".json")
             data = {
                 "latencies": latencies_list,
                 "n_hops": n_hops_list,
@@ -291,8 +291,6 @@ if __name__ == "__main__":
                 tmp_path = tmp.name
 
             shutil.move(tmp_path, filename)
-
-    p = Plots()
 
     p.plot_timing_schemes(evaluation_data['request_completion'])
     p.plot_win_percentage(evaluation_data['request_completion'])
