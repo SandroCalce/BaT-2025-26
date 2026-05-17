@@ -7,7 +7,6 @@ import numpy as np
 import time as systime
 import matplotlib.pyplot as plt
 
-import datetime
 from numpy.random import default_rng
 from networkx import Graph
 
@@ -17,6 +16,7 @@ from src.qn_sim.core.topology import (
     gen_pair_queue,
     gen_request_time_list
 )
+
 from src.qn_sim.models.node import Node
 from src.qn_sim.protocols.request import Request
 from src.qn_sim.core.engine import Engine
